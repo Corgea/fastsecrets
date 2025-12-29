@@ -5,6 +5,7 @@ mod secrets {
     pub mod aws;
     pub mod jwt;
     pub mod openai;
+    pub mod private_key;
 }
 
 /// Secret class representing a detected secret
@@ -40,6 +41,7 @@ impl Secret {
 /// - OpenAI API Tokens (sk-...)
 /// - Anthropic API Keys (sk-ant-...)
 /// - JWT Tokens (validated JSON Web Tokens)
+/// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY)
 /// - More detectors can be added here in the future
 ///
 /// # Arguments
@@ -97,6 +99,12 @@ fn detect(py: Python<'_>, secret: &str) -> PyResult<Vec<Secret>> {
         detector_tasks.push(Box::new({
             let s = secret_owned.clone();
             move || secrets::jwt::detect_jwt_tokens(&s)
+        }));
+
+        // Private key detector
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::private_key::detect_private_keys(&s)
         }));
 
         // Future detectors can be added here
@@ -231,6 +239,19 @@ mod tests {
             assert!(found_secrets.contains(&"AWS Secret Access Key".to_string()));
             assert!(found_secrets.contains(&"OpenAI Token".to_string()));
             assert!(found_secrets.contains(&"Anthropic API Key".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_detect_private_key() {
+        let private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let result = detect(py, private_key).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].secret_type, "Private Key");
+            assert_eq!(result[0].value, "BEGIN RSA PRIVATE KEY");
         });
     }
 

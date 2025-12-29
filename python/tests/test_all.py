@@ -104,7 +104,9 @@ def test_detect_invalid_aws_key_lowercase():
 
 def test_detect_aws_secret_key_double_quotes():
     """Test that AWS Secret Access Keys with double quotes are detected"""
-    result = fastsecrets.detect('secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"')
+    result = fastsecrets.detect(
+        'secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'
+    )
     assert len(result) == 1
     assert result[0].secret_type == "AWS Secret Access Key"
     assert result[0].value == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -112,7 +114,9 @@ def test_detect_aws_secret_key_double_quotes():
 
 def test_detect_aws_secret_key_single_quotes():
     """Test that AWS Secret Access Keys with single quotes are detected"""
-    result = fastsecrets.detect("some_function('AKIA...', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')")
+    result = fastsecrets.detect(
+        "some_function('AKIA...', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "AWS Secret Access Key"
     assert result[0].value == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -120,7 +124,9 @@ def test_detect_aws_secret_key_single_quotes():
 
 def test_detect_aws_secret_key_no_quotes():
     """Test that AWS Secret Access Keys without quotes are detected"""
-    result = fastsecrets.detect("credentials(AKIA..., wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY)")
+    result = fastsecrets.detect(
+        "credentials(AKIA..., wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY)"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "AWS Secret Access Key"
     assert result[0].value == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -128,7 +134,9 @@ def test_detect_aws_secret_key_no_quotes():
 
 def test_detect_aws_secret_key_with_comma():
     """Test that AWS Secret Access Keys with comma separator are detected"""
-    result = fastsecrets.detect('aws_credentials("key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")')
+    result = fastsecrets.detect(
+        'aws_credentials("key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")'
+    )
     assert len(result) == 1
     assert result[0].secret_type == "AWS Secret Access Key"
     assert result[0].value == "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -162,7 +170,9 @@ def test_detect_openai_token_legacy():
 
 def test_detect_openai_token_project_based():
     """Test that project-based OpenAI tokens are detected"""
-    result = fastsecrets.detect("sk-proj-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN")
+    result = fastsecrets.detect(
+        "sk-proj-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "OpenAI Token"
     assert result[0].value == "sk-proj-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
@@ -170,15 +180,22 @@ def test_detect_openai_token_project_based():
 
 def test_detect_openai_token_with_underscores():
     """Test that OpenAI tokens with underscores in project name are detected"""
-    result = fastsecrets.detect("sk-my_project-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN")
+    result = fastsecrets.detect(
+        "sk-my_project-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "OpenAI Token"
-    assert result[0].value == "sk-my_project-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
+    assert (
+        result[0].value
+        == "sk-my_project-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
+    )
 
 
 def test_detect_openai_token_in_code():
     """Test that OpenAI tokens embedded in code are detected"""
-    result = fastsecrets.detect("openai.api_key = 'sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN'")
+    result = fastsecrets.detect(
+        "openai.api_key = 'sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN'"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "OpenAI Token"
     assert result[0].value == "sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"
@@ -204,15 +221,22 @@ def test_detect_openai_token_invalid_too_short():
 
 def test_detect_anthropic_api_key():
     """Test that Anthropic API keys are properly detected"""
-    result = fastsecrets.detect("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY")
+    result = fastsecrets.detect(
+        "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "Anthropic API Key"
-    assert result[0].value == "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"
+    assert (
+        result[0].value
+        == "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"
+    )
 
 
 def test_detect_anthropic_api_key_in_code():
     """Test that Anthropic API keys embedded in code are detected"""
-    result = fastsecrets.detect("ANTHROPIC_API_KEY = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY'")
+    result = fastsecrets.detect(
+        "ANTHROPIC_API_KEY = 'sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY'"
+    )
     assert len(result) == 1
     assert result[0].secret_type == "Anthropic API Key"
     assert len(result[0].value) == 108
@@ -220,7 +244,9 @@ def test_detect_anthropic_api_key_in_code():
 
 def test_detect_anthropic_api_key_in_json():
     """Test that Anthropic API keys in JSON are detected"""
-    result = fastsecrets.detect('{"api_key": "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"}')
+    result = fastsecrets.detect(
+        '{"api_key": "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"}'
+    )
     assert len(result) == 1
     assert result[0].secret_type == "Anthropic API Key"
 
@@ -233,19 +259,25 @@ def test_detect_anthropic_api_key_invalid_too_short():
 
 def test_detect_anthropic_api_key_invalid_too_long():
     """Test that Anthropic keys that are too long are not detected"""
-    result = fastsecrets.detect("sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZa")
+    result = fastsecrets.detect(
+        "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZa"
+    )
     assert len(result) == 0
 
 
 def test_detect_anthropic_api_key_invalid_wrong_prefix():
     """Test that keys with wrong prefix are not detected"""
-    result = fastsecrets.detect("sk-api-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY")
+    result = fastsecrets.detect(
+        "sk-api-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY"
+    )
     assert len(result) == 0
 
 
 def test_detect_multiple_anthropic_keys():
     """Test that multiple Anthropic keys in one string are detected"""
-    result = fastsecrets.detect("key1=sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY and key2=sk-ant-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJK")
+    result = fastsecrets.detect(
+        "key1=sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY and key2=sk-ant-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-abcdefghijklmnopqrstuvwxyzABCDEFGHIJK"
+    )
     assert len(result) == 2
     assert result[0].secret_type == "Anthropic API Key"
     assert result[1].secret_type == "Anthropic API Key"
@@ -373,7 +405,7 @@ NOT_A_SECRET = hello_world
 """
 
     found_secrets = []
-    for line in code.strip().split('\n'):
+    for line in code.strip().split("\n"):
         results = fastsecrets.detect(line)
         for secret in results:
             found_secrets.append(secret.secret_type)
@@ -403,7 +435,7 @@ def test_no_false_positives_with_similar_patterns():
 
 def test_detect_mixed_secrets_in_realistic_code():
     """Test detection in a realistic code snippet with multiple secret types"""
-    code_snippet = '''
+    code_snippet = """
 import boto3
 import openai
 
@@ -416,10 +448,10 @@ s3_client = boto3.client(
 
 # OpenAI Configuration
 openai.api_key = 'sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN'
-'''
+"""
 
     secrets_found = {}
-    for line in code_snippet.split('\n'):
+    for line in code_snippet.split("\n"):
         results = fastsecrets.detect(line)
         for secret in results:
             secrets_found[secret.secret_type] = secret.value
@@ -428,3 +460,105 @@ openai.api_key = 'sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN'
     assert len(secrets_found) >= 2
     assert "AWS Secret Access Key" in secrets_found
     assert "OpenAI Token" in secrets_found
+
+
+# Private Key Tests
+
+
+def test_detect_rsa_private_key():
+    """Test that RSA private keys are properly detected"""
+    private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----"
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN RSA PRIVATE KEY"
+
+
+def test_detect_ec_private_key():
+    """Test that EC private keys are properly detected"""
+    private_key = (
+        "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIIGl...\n-----END EC PRIVATE KEY-----"
+    )
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN EC PRIVATE KEY"
+
+
+def test_detect_openssh_private_key():
+    """Test that OpenSSH private keys are properly detected"""
+    private_key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA...\n-----END OPENSSH PRIVATE KEY-----"
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN OPENSSH PRIVATE KEY"
+
+
+def test_detect_pgp_private_key():
+    """Test that PGP private keys are properly detected"""
+    private_key = "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG v1\n\nlQOYBF...\n-----END PGP PRIVATE KEY BLOCK-----"
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN PGP PRIVATE KEY BLOCK"
+
+
+def test_detect_generic_private_key():
+    """Test that generic PKCS#8 private keys are properly detected"""
+    private_key = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcw...\n-----END PRIVATE KEY-----"
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN PRIVATE KEY"
+
+
+def test_detect_putty_private_key():
+    """Test that PuTTY private keys are properly detected"""
+    private_key = "PuTTY-User-Key-File-2: ssh-rsa\nEncryption: none\nComment: imported-openssh-key"
+    result = fastsecrets.detect(private_key)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "PuTTY-User-Key-File-2"
+
+
+def test_detect_private_key_in_code():
+    """Test that private keys embedded in code are detected"""
+    code = '''
+private_key = """-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEA...
+-----END RSA PRIVATE KEY-----"""
+    '''
+    result = fastsecrets.detect(code)
+    assert len(result) == 1
+    assert result[0].secret_type == "Private Key"
+    assert result[0].value == "BEGIN RSA PRIVATE KEY"
+
+
+def test_detect_multiple_private_keys():
+    """Test that multiple private keys in the same string are detected"""
+    multi = "Key1: -----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\nKey2: -----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----"
+    results = fastsecrets.detect(multi)
+    assert len(results) == 2
+
+    # Check that both are "Private Key" type
+    secret_types = [r.secret_type for r in results]
+    assert all(t == "Private Key" for t in secret_types)
+
+    # Check that we found both key types (order may vary)
+    values = [r.value for r in results]
+    assert "BEGIN RSA PRIVATE KEY" in values
+    assert "BEGIN EC PRIVATE KEY" in values
+
+
+def test_no_false_positive_for_public_key():
+    """Test that public keys are not detected as private keys"""
+    public_key = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA...\n-----END PUBLIC KEY-----"
+    result = fastsecrets.detect(public_key)
+    assert len(result) == 0
+
+
+def test_no_false_positive_for_lowercase_private_key():
+    """Test that lowercase private key markers are not detected (case sensitive)"""
+    lowercase_key = "begin rsa private key"
+    result = fastsecrets.detect(lowercase_key)
+    assert len(result) == 0
