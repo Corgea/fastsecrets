@@ -1,13 +1,12 @@
 # fastsecrets
 
-Fast secret detection using Rust with Python bindings. Scan strings and files for secret keys, API tokens, and credentials using blazingly fast regular expressions compiled to native code.
+Simple and fast secret detection. Scan strings and files for secret keys, API tokens, and credentials.
 
 ## Features
 
 - **High Performance**: Regex matching powered by Rust with parallel processing
 - **Multiple Secret Types**: Detects various types of credentials and keys
 - **Easy Integration**: Simple Python API with both programmatic and CLI interfaces
-- **Zero False Positives**: Strict pattern matching to avoid false alarms
 
 ### Supported Secret Types
 
