@@ -17,5 +17,8 @@ tests = [
     "pytest",
 ]
 
+[project.scripts]
+fastsecrets = "fastsecrets.cli:main"
+
 [tool.maturin]
 python-source = "python"
