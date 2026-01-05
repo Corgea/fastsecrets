@@ -5,6 +5,7 @@ mod secrets {
     pub mod aws;
     pub mod basic_auth;
     pub mod jwt;
+    pub mod npm;
     pub mod openai;
     pub mod private_key;
 }
@@ -52,13 +53,14 @@ fn should_run_detector(detector_type: &str, secret_types: &Option<Vec<String>>) 
 /// - JWT Tokens (validated JSON Web Tokens) - filter: "jwt"
 /// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY) - filter: "private_key"
 /// - Basic Auth Credentials (passwords in URIs like user:pass@host) - filter: "basic_auth"
+/// - NPM Tokens (npmrc authToken) - filter: "npm"
 /// - More detectors can be added here in the future
 ///
 /// # Arguments
 /// * `py` - Python context (used to release GIL during computation)
 /// * `secret` - The string to check for secret patterns
 /// * `secret_types` - Optional list of secret types to detect. If None, all types are detected.
-///                    Valid values: "aws", "openai", "anthropic", "jwt", "private_key", "basic_auth"
+///                    Valid values: "aws", "openai", "anthropic", "jwt", "private_key", "basic_auth", "npm"
 ///
 /// # Returns
 /// * `Vec<Secret>` - List of all secrets found (empty list if none detected)
@@ -149,6 +151,14 @@ fn detect(py: Python<'_>, secret: &str, secret_types: Option<Vec<String>>) -> Py
             }));
         }
 
+        // NPM token detector
+        if should_run_detector("npm", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::npm::detect_npm_tokens(&s)
+            }));
+        }
+
         // Future detectors can be added here
         // if should_run_detector("stripe", &secret_types) {
         //     detector_tasks.push(Box::new({
@@ -218,8 +228,8 @@ mod tests {
         let openai = "sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN";
         let anthropic = "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY";
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let result1 = detect(py, aws_key, None).unwrap();
             assert_eq!(result1.len(), 1);
             assert_eq!(result1[0].secret_type, "AWS Access Key ID");
@@ -243,8 +253,8 @@ mod tests {
         // When multiple secrets are in the same string, detect() returns all of them
         let multi_secret = r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let result = detect(py, multi_secret, None).unwrap();
             assert_eq!(result.len(), 2);
 
@@ -267,8 +277,8 @@ mod tests {
             "NOT_A_SECRET = hello_world",
         ];
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let mut found_secrets = Vec::new();
             for line in lines {
                 let secrets = detect(py, line, None).unwrap();
@@ -290,8 +300,8 @@ mod tests {
     fn test_detect_private_key() {
         let private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let result = detect(py, private_key, None).unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].secret_type, "Private Key");
@@ -310,8 +320,8 @@ mod tests {
             "completely_normal_text",
         ];
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             for non_secret in non_secrets {
                 let result = detect(py, non_secret, None).unwrap();
                 assert!(result.is_empty(), "False positive for: {}", non_secret);
@@ -324,8 +334,8 @@ mod tests {
         // Test filtering to only detect AWS secrets
         let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let filter = Some(vec!["aws".to_string()]);
             let result = detect(py, multi_secret, filter).unwrap();
 
@@ -340,8 +350,8 @@ mod tests {
         // Test filtering to only detect OpenAI secrets
         let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let filter = Some(vec!["openai".to_string()]);
             let result = detect(py, multi_secret, filter).unwrap();
 
@@ -356,8 +366,8 @@ mod tests {
         // Test filtering with multiple types
         let content = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN and https://user:pass@example.com"#;
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             // Filter for aws and basic_auth, should not detect OpenAI
             let filter = Some(vec!["aws".to_string(), "basic_auth".to_string()]);
             let result = detect(py, content, filter).unwrap();
@@ -375,8 +385,8 @@ mod tests {
         // Empty filter means no detectors run
         let aws_key = "AKIAIOSFODNN7EXAMPLE";
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let filter = Some(vec![]);
             let result = detect(py, aws_key, filter).unwrap();
             assert!(result.is_empty());
@@ -388,8 +398,8 @@ mod tests {
         // Invalid filter type should not match any detector
         let aws_key = "AKIAIOSFODNN7EXAMPLE";
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let filter = Some(vec!["invalid_type".to_string()]);
             let result = detect(py, aws_key, filter).unwrap();
             assert!(result.is_empty());
@@ -400,8 +410,8 @@ mod tests {
     fn test_detect_basic_auth_with_filter() {
         let url = "https://admin:secretpass@example.com/api";
 
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::initialize();
+        Python::attach(|py| {
             let filter = Some(vec!["basic_auth".to_string()]);
             let result = detect(py, url, filter).unwrap();
 

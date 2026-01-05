@@ -27,6 +27,7 @@ Simple and fast secret detection. Scan strings and files for secret keys, API to
 - **JWT Tokens**
   - Valid JSON Web Tokens with proper structure
 - **Basic Auth Credentials**
+- **NPM Tokens**
 
 ## Installation
 
