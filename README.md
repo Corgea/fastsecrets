@@ -26,6 +26,7 @@ Simple and fast secret detection. Scan strings and files for secret keys, API to
   - PuTTY Private Keys
 - **JWT Tokens**
   - Valid JSON Web Tokens with proper structure
+- **Basic Auth Credentials**
 
 ## Installation
 
@@ -60,13 +61,9 @@ for test_string in test_strings:
             print(f"Secret value: {secret.value}")
     else:
         print("No secrets found")
-
-# Scan file line by line
-with open("config.txt", "r") as f:
-    for line_num, line in enumerate(f, start=1):
-        secrets = detect(line)
-        for secret in secrets:
-            print(f"Line {line_num}: [{secret.secret_type}] {secret.value}")
+    
+# detect only specific types
+results = detect("some string", secret_types=["openai", "anthropic"]) 
 ```
 
 ### Command Line Interface

@@ -32,28 +32,50 @@ impl Secret {
     }
 }
 
+/// Helper function to check if a detector type should run based on the filter
+fn should_run_detector(detector_type: &str, secret_types: &Option<Vec<String>>) -> bool {
+    match secret_types {
+        None => true, // No filter, run all detectors
+        Some(types) => types.iter().any(|t| t == detector_type),
+    }
+}
+
 /// Detects all secret keys in a given string
 ///
 /// This function runs each detector in parallel using separate threads for optimal performance.
 ///
 /// Supports detection of:
-/// - AWS Access Key IDs (AKIA, ASIA, ABIA, ACCA, A3T*)
-/// - AWS Secret Access Keys (40 character keys with context)
-/// - OpenAI API Tokens (sk-...)
-/// - Anthropic API Keys (sk-ant-...)
-/// - JWT Tokens (validated JSON Web Tokens)
-/// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY)
-/// - Basic Auth Credentials (passwords in URIs like user:pass@host)
+/// - AWS Access Key IDs (AKIA, ASIA, ABIA, ACCA, A3T*) - filter: "aws"
+/// - AWS Secret Access Keys (40 character keys with context) - filter: "aws"
+/// - OpenAI API Tokens (sk-...) - filter: "openai"
+/// - Anthropic API Keys (sk-ant-...) - filter: "anthropic"
+/// - JWT Tokens (validated JSON Web Tokens) - filter: "jwt"
+/// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY) - filter: "private_key"
+/// - Basic Auth Credentials (passwords in URIs like user:pass@host) - filter: "basic_auth"
 /// - More detectors can be added here in the future
 ///
 /// # Arguments
 /// * `py` - Python context (used to release GIL during computation)
 /// * `secret` - The string to check for secret patterns
+/// * `secret_types` - Optional list of secret types to detect. If None, all types are detected.
+///                    Valid values: "aws", "openai", "anthropic", "jwt", "private_key", "basic_auth"
 ///
 /// # Returns
 /// * `Vec<Secret>` - List of all secrets found (empty list if none detected)
+///
+/// # Example
+/// ```python
+/// from fastsecrets import detect
+///
+/// # Detect all secret types
+/// results = detect("AKIAIOSFODNN7EXAMPLE")
+///
+/// # Detect only specific types
+/// results = detect("some string", secret_types=["aws", "anthropic"])
+/// ```
 #[pyfunction]
-fn detect(py: Python<'_>, secret: &str) -> PyResult<Vec<Secret>> {
+#[pyo3(signature = (secret, secret_types=None))]
+fn detect(py: Python<'_>, secret: &str, secret_types: Option<Vec<String>>) -> PyResult<Vec<Secret>> {
     // Convert to owned String for thread safety
     let secret_owned = secret.to_string();
 
@@ -68,58 +90,72 @@ fn detect(py: Python<'_>, secret: &str) -> PyResult<Vec<Secret>> {
         let mut detector_tasks: Vec<Box<dyn FnOnce() -> Vec<(String, String)> + Send>> = vec![];
 
         // AWS Access Key ID detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || {
-                let mut results = Vec::new();
-                if let Some((secret_type, value)) = secrets::aws::detect_aws_access_key(&s) {
-                    results.push((secret_type, value));
+        if should_run_detector("aws", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || {
+                    let mut results = Vec::new();
+                    if let Some((secret_type, value)) = secrets::aws::detect_aws_access_key(&s) {
+                        results.push((secret_type, value));
+                    }
+                    results
                 }
-                results
-            }
-        }));
+            }));
 
-        // AWS Secret Access Key detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::aws::detect_aws_secret_keys(&s)
-        }));
+            // AWS Secret Access Key detector
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::aws::detect_aws_secret_keys(&s)
+            }));
+        }
 
         // OpenAI token detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::openai::detect_openai_tokens(&s)
-        }));
+        if should_run_detector("openai", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::openai::detect_openai_tokens(&s)
+            }));
+        }
 
         // Anthropic API key detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::anthropic::detect_anthropic_tokens(&s)
-        }));
+        if should_run_detector("anthropic", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::anthropic::detect_anthropic_tokens(&s)
+            }));
+        }
 
         // JWT token detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::jwt::detect_jwt_tokens(&s)
-        }));
+        if should_run_detector("jwt", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::jwt::detect_jwt_tokens(&s)
+            }));
+        }
 
         // Private key detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::private_key::detect_private_keys(&s)
-        }));
+        if should_run_detector("private_key", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::private_key::detect_private_keys(&s)
+            }));
+        }
 
         // Basic Auth credentials detector
-        detector_tasks.push(Box::new({
-            let s = secret_owned.clone();
-            move || secrets::basic_auth::detect_basic_auth_credentials(&s)
-        }));
+        if should_run_detector("basic_auth", &secret_types) {
+            detector_tasks.push(Box::new({
+                let s = secret_owned.clone();
+                move || secrets::basic_auth::detect_basic_auth_credentials(&s)
+            }));
+        }
 
         // Future detectors can be added here
-        // detector_tasks.push(Box::new({
-        //     let s = secret_owned.clone();
-        //     move || secrets::stripe::detect_stripe_keys(&s)
-        // }));
+        // if should_run_detector("stripe", &secret_types) {
+        //     detector_tasks.push(Box::new({
+        //         let s = secret_owned.clone();
+        //         move || secrets::stripe::detect_stripe_keys(&s)
+        //     }));
+        // }
 
         // Process detector tasks in batches based on CPU count
         let mut all_secrets = Vec::new();
@@ -184,19 +220,19 @@ mod tests {
 
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let result1 = detect(py, aws_key).unwrap();
+            let result1 = detect(py, aws_key, None).unwrap();
             assert_eq!(result1.len(), 1);
             assert_eq!(result1[0].secret_type, "AWS Access Key ID");
 
-            let result2 = detect(py, aws_secret).unwrap();
+            let result2 = detect(py, aws_secret, None).unwrap();
             assert_eq!(result2.len(), 1);
             assert_eq!(result2[0].secret_type, "AWS Secret Access Key");
 
-            let result3 = detect(py, openai).unwrap();
+            let result3 = detect(py, openai, None).unwrap();
             assert_eq!(result3.len(), 1);
             assert_eq!(result3[0].secret_type, "OpenAI Token");
 
-            let result4 = detect(py, anthropic).unwrap();
+            let result4 = detect(py, anthropic, None).unwrap();
             assert_eq!(result4.len(), 1);
             assert_eq!(result4[0].secret_type, "Anthropic API Key");
         });
@@ -209,7 +245,7 @@ mod tests {
 
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let result = detect(py, multi_secret).unwrap();
+            let result = detect(py, multi_secret, None).unwrap();
             assert_eq!(result.len(), 2);
 
             // Should detect both secrets
@@ -235,7 +271,7 @@ mod tests {
         Python::with_gil(|py| {
             let mut found_secrets = Vec::new();
             for line in lines {
-                let secrets = detect(py, line).unwrap();
+                let secrets = detect(py, line, None).unwrap();
                 for secret in secrets {
                     found_secrets.push(secret.secret_type.clone());
                 }
@@ -253,10 +289,10 @@ mod tests {
     #[test]
     fn test_detect_private_key() {
         let private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
-        
+
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
-            let result = detect(py, private_key).unwrap();
+            let result = detect(py, private_key, None).unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].secret_type, "Private Key");
             assert_eq!(result[0].value, "BEGIN RSA PRIVATE KEY");
@@ -277,9 +313,101 @@ mod tests {
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
             for non_secret in non_secrets {
-                let result = detect(py, non_secret).unwrap();
+                let result = detect(py, non_secret, None).unwrap();
                 assert!(result.is_empty(), "False positive for: {}", non_secret);
             }
+        });
+    }
+
+    #[test]
+    fn test_detect_with_secret_types_filter_aws_only() {
+        // Test filtering to only detect AWS secrets
+        let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let filter = Some(vec!["aws".to_string()]);
+            let result = detect(py, multi_secret, filter).unwrap();
+
+            // Should only detect AWS key, not OpenAI
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].secret_type, "AWS Access Key ID");
+        });
+    }
+
+    #[test]
+    fn test_detect_with_secret_types_filter_openai_only() {
+        // Test filtering to only detect OpenAI secrets
+        let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let filter = Some(vec!["openai".to_string()]);
+            let result = detect(py, multi_secret, filter).unwrap();
+
+            // Should only detect OpenAI token, not AWS
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].secret_type, "OpenAI Token");
+        });
+    }
+
+    #[test]
+    fn test_detect_with_secret_types_filter_multiple() {
+        // Test filtering with multiple types
+        let content = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN and https://user:pass@example.com"#;
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            // Filter for aws and basic_auth, should not detect OpenAI
+            let filter = Some(vec!["aws".to_string(), "basic_auth".to_string()]);
+            let result = detect(py, content, filter).unwrap();
+
+            assert_eq!(result.len(), 2);
+            let types: Vec<&str> = result.iter().map(|s| s.secret_type.as_str()).collect();
+            assert!(types.contains(&"AWS Access Key ID"));
+            assert!(types.contains(&"Basic Auth Credentials"));
+            assert!(!types.contains(&"OpenAI Token"));
+        });
+    }
+
+    #[test]
+    fn test_detect_with_empty_filter_returns_nothing() {
+        // Empty filter means no detectors run
+        let aws_key = "AKIAIOSFODNN7EXAMPLE";
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let filter = Some(vec![]);
+            let result = detect(py, aws_key, filter).unwrap();
+            assert!(result.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_detect_with_invalid_filter_returns_nothing() {
+        // Invalid filter type should not match any detector
+        let aws_key = "AKIAIOSFODNN7EXAMPLE";
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let filter = Some(vec!["invalid_type".to_string()]);
+            let result = detect(py, aws_key, filter).unwrap();
+            assert!(result.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_detect_basic_auth_with_filter() {
+        let url = "https://admin:secretpass@example.com/api";
+
+        pyo3::prepare_freethreaded_python();
+        Python::with_gil(|py| {
+            let filter = Some(vec!["basic_auth".to_string()]);
+            let result = detect(py, url, filter).unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].secret_type, "Basic Auth Credentials");
+            assert_eq!(result[0].value, "secretpass");
         });
     }
 }
