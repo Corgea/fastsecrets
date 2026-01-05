@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 mod secrets {
     pub mod anthropic;
     pub mod aws;
+    pub mod basic_auth;
     pub mod jwt;
     pub mod openai;
     pub mod private_key;
@@ -42,6 +43,7 @@ impl Secret {
 /// - Anthropic API Keys (sk-ant-...)
 /// - JWT Tokens (validated JSON Web Tokens)
 /// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY)
+/// - Basic Auth Credentials (passwords in URIs like user:pass@host)
 /// - More detectors can be added here in the future
 ///
 /// # Arguments
@@ -105,6 +107,12 @@ fn detect(py: Python<'_>, secret: &str) -> PyResult<Vec<Secret>> {
         detector_tasks.push(Box::new({
             let s = secret_owned.clone();
             move || secrets::private_key::detect_private_keys(&s)
+        }));
+
+        // Basic Auth credentials detector
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::basic_auth::detect_basic_auth_credentials(&s)
         }));
 
         // Future detectors can be added here
