@@ -5,9 +5,10 @@ This project is designed to search a string for secret keys. All the regular exp
 - `src` folder: Contains the Rust source code for the secret detection logic.
 
 ## Guidelines:
+- uses maturin for building python bindings  
 - use `uv` for managing python
 - add tests for new functionality
 
 ## Commands
 - Run rust tests: `cargo test`
-- Run python tests: `uv run pytest`
+- Run python tests: `maturin develop && uv run pytest`
