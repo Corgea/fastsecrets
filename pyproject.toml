@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "fastsecrets"
+description = "Simple and fast secret detection. Scan strings and files for secret keys, API tokens, and credentials."
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -11,6 +12,16 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+authors = [
+    { name = "Adam Bronte", email = "adam@corgea.com" }
+]
+
+[project.urls]
+Homepage = "https://github.com/Corgea/fastsecrets"
+Documentation = "https://github.com/Corgea/fastsecrets"
+Repository = "https://github.com/Corgea/fastsecrets"
+Issues = "https://github.com/Corgea/fastsecrets/issues"
+Changelog = "https://github.com/Corgea/fastsecrets/releases"
 
 [project.optional-dependencies]
 tests = [
