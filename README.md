@@ -10,24 +10,13 @@ Simple and fast secret detection. Scan strings and files for secret keys, API to
 
 ### Supported Secret Types
 
-- **AWS Credentials**
-  - AWS Access Key IDs (AKIA, ASIA, ABIA, ACCA, A3T*)
-  - AWS Secret Access Keys (40 character keys with context)
-- **API Keys**
-  - OpenAI API Tokens (sk-...)
-  - Anthropic API Keys (sk-ant-...)
-- **Private Keys**
-  - RSA Private Keys
-  - EC Private Keys
-  - DSA Private Keys
-  - OpenSSH Private Keys
-  - PGP Private Keys
-  - SSH2 Private Keys
-  - PuTTY Private Keys
-- **JWT Tokens**
-  - Valid JSON Web Tokens with proper structure
-- **Basic Auth Credentials**
-- **NPM Tokens**
+- AWS Credentials
+- OpenAI API Tokens (sk-...)
+- Anthropic API Keys (sk-ant-...)
+- Private Keys
+- JWT Tokens
+- Basic Auth Credentials
+- NPM Tokens
 
 ## Installation
 
