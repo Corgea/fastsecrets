@@ -1,5 +1,5 @@
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
 /// Regex pattern for AWS Access Key ID detection
 /// Matches multiple AWS Access Key types:
@@ -11,7 +11,8 @@ use once_cell::sync::Lazy;
 /// All followed by 16 alphanumeric characters (uppercase and digits only)
 /// Total length: 20 characters
 static AWS_ACCESS_KEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\b(?:A3T[A-Z0-9]|ABIA|ACCA|AKIA|ASIA)[0-9A-Z]{16}\b").expect("Invalid regex pattern")
+    Regex::new(r"\b(?:A3T[A-Z0-9]|ABIA|ACCA|AKIA|ASIA)[0-9A-Z]{16}\b")
+        .expect("Invalid regex pattern")
 });
 
 /// Regex pattern for AWS Secret Access Key detection
@@ -19,7 +20,8 @@ static AWS_ACCESS_KEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
 /// Optimized to avoid backtracking - quote validation done in code
 /// Pattern captures: (1) optional quote, (2) the 40-char key, (3) optional quote after
 static AWS_SECRET_KEY_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"(?:=|,|\()\s*(['"]?)([a-zA-Z0-9+/=]{40})(['"]?)\)?(?:\s|$|[,)\n])"#).expect("Invalid regex pattern")
+    Regex::new(r#"(?:=|,|\()\s*(['"]?)([a-zA-Z0-9+/=]{40})(['"]?)\)?(?:\s|$|[,)\n])"#)
+        .expect("Invalid regex pattern")
 });
 
 /// Detects if a string contains an AWS Access Key ID
@@ -45,36 +47,6 @@ pub fn detect_aws_access_key(secret: &str) -> Option<(String, String)> {
     } else {
         None
     }
-}
-
-/// Detects if a string contains an AWS Secret Access Key
-///
-/// AWS secret access keys are 40 characters long and must be preceded by =, comma, or (
-/// Examples:
-/// - `secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`
-/// - `some_function('AKIA...', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')`
-///
-/// # Arguments
-/// * `content` - The string to check for AWS Secret Key pattern
-///
-/// # Returns
-/// * `Option<(String, String)>` - None if no match, Some((secret_type, value)) if match found
-pub fn detect_aws_secret_key(content: &str) -> Option<(String, String)> {
-    if let Some(captures) = AWS_SECRET_KEY_PATTERN.captures(content) {
-        // Group 1: optional opening quote, Group 2: 40-char key, Group 3: optional closing quote
-        let opening_quote = captures.get(1).map(|m| m.as_str()).unwrap_or("");
-        let secret_match = captures.get(2)?;
-        let closing_quote = captures.get(3).map(|m| m.as_str()).unwrap_or("");
-
-        // Validate that quotes match (both empty, or both the same quote character)
-        if opening_quote == closing_quote {
-            return Some((
-                "AWS Secret Access Key".to_string(),
-                secret_match.as_str().to_string(),
-            ));
-        }
-    }
-    None
 }
 
 /// Detects all AWS Secret Access Keys in a string
@@ -192,43 +164,72 @@ mod tests {
     #[test]
     fn test_valid_aws_secret_key() {
         // Test with double quotes
-        let result = detect_aws_secret_key(r#"secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY""#);
-        assert!(result.is_some());
-        let (secret_type, value) = result.unwrap();
+        let result = detect_aws_secret_keys(
+            r#"secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY""#,
+        );
+        assert!(!result.is_empty());
+        let (secret_type, value) = result.first().unwrap();
         assert_eq!(secret_type, "AWS Secret Access Key");
         assert_eq!(value, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
 
         // Test with single quotes
-        let result = detect_aws_secret_key(r"some_function('AKIA...', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')");
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().1, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let result = detect_aws_secret_keys(
+            r"some_function('AKIA...', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')",
+        );
+        assert!(!result.is_empty());
+        assert_eq!(
+            result.first().unwrap().1,
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        );
 
         // Test without quotes
-        let result = detect_aws_secret_key("credentials(AKIA..., wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY)");
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().1, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let result = detect_aws_secret_keys(
+            "credentials(AKIA..., wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY)",
+        );
+        assert!(!result.is_empty());
+        assert_eq!(
+            result.first().unwrap().1,
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        );
 
         // Test with comma separator
-        let result = detect_aws_secret_key(r#"aws_credentials("key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")"#);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().1, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+        let result = detect_aws_secret_keys(
+            r#"aws_credentials("key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")"#,
+        );
+        assert!(!result.is_empty());
+        assert_eq!(
+            result.first().unwrap().1,
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        );
     }
 
     #[test]
     fn test_invalid_aws_secret_key() {
         // Too short (39 chars)
-        assert!(detect_aws_secret_key(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE""#).is_none());
+        assert!(
+            detect_aws_secret_keys(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE""#)
+                .is_empty()
+        );
 
         // Too long (41 chars)
-        assert!(detect_aws_secret_key(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY1""#).is_none());
+        assert!(
+            detect_aws_secret_keys(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY1""#)
+                .is_empty()
+        );
 
         // Invalid characters
-        assert!(detect_aws_secret_key(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE$""#).is_none());
+        assert!(
+            detect_aws_secret_keys(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLE$""#)
+                .is_empty()
+        );
 
         // No preceding context
-        assert!(detect_aws_secret_key("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY").is_none());
+        assert!(detect_aws_secret_keys("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY").is_empty());
 
         // Mismatched quotes
-        assert!(detect_aws_secret_key(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'"#).is_none());
+        assert!(
+            detect_aws_secret_keys(r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'"#)
+                .is_empty()
+        );
     }
 }

@@ -24,7 +24,10 @@ pub struct Secret {
 impl Secret {
     /// Returns a string representation of the Secret
     fn __repr__(&self) -> String {
-        format!("Secret(secret_type='{}', value='{}')", self.secret_type, self.value)
+        format!(
+            "Secret(secret_type='{}', value='{}')",
+            self.secret_type, self.value
+        )
     }
 
     /// Returns a string representation of the Secret
@@ -77,7 +80,11 @@ fn should_run_detector(detector_type: &str, secret_types: &Option<Vec<String>>) 
 /// ```
 #[pyfunction]
 #[pyo3(signature = (secret, secret_types=None))]
-fn detect(py: Python<'_>, secret: &str, secret_types: Option<Vec<String>>) -> PyResult<Vec<Secret>> {
+fn detect(
+    py: Python<'_>,
+    secret: &str,
+    secret_types: Option<Vec<String>>,
+) -> PyResult<Vec<Secret>> {
     // Convert to owned String for thread safety
     let secret_owned = secret.to_string();
 
@@ -298,7 +305,8 @@ mod tests {
 
     #[test]
     fn test_detect_private_key() {
-        let private_key = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+        let private_key =
+            "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
 
         Python::initialize();
         Python::attach(|py| {
@@ -313,9 +321,9 @@ mod tests {
     fn test_no_false_positives_with_similar_patterns() {
         // Ensure similar-looking strings don't trigger false positives
         let non_secrets = vec![
-            "AKIA123456789",  // Too short for AWS key
-            "sk-project-name-only",  // Missing T3BlbkFJ
-            "secret = \"short_value\"",  // Too short for AWS secret
+            "AKIA123456789",            // Too short for AWS key
+            "sk-project-name-only",     // Missing T3BlbkFJ
+            "secret = \"short_value\"", // Too short for AWS secret
             "",
             "completely_normal_text",
         ];
@@ -332,7 +340,8 @@ mod tests {
     #[test]
     fn test_detect_with_secret_types_filter_aws_only() {
         // Test filtering to only detect AWS secrets
-        let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
+        let multi_secret =
+            r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
 
         Python::initialize();
         Python::attach(|py| {
@@ -348,7 +357,8 @@ mod tests {
     #[test]
     fn test_detect_with_secret_types_filter_openai_only() {
         // Test filtering to only detect OpenAI secrets
-        let multi_secret = r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
+        let multi_secret =
+            r#"AKIAIOSFODNN7EXAMPLE and key = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN"#;
 
         Python::initialize();
         Python::attach(|py| {

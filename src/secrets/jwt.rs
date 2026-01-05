@@ -1,5 +1,5 @@
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
 /// Regex pattern for JWT detection
 /// Format: header.payload.signature where each part is base64url encoded
@@ -82,29 +82,6 @@ fn base64_decode_urlsafe(input: &str) -> Option<String> {
     }
 }
 
-/// Detects if a string contains a JWT token
-///
-/// JWTs have the format: header.payload.signature
-/// Each part is base64url encoded.
-///
-/// # Arguments
-/// * `secret` - The string to check for JWT pattern
-///
-/// # Returns
-/// * `Option<(String, String)>` - None if no match, Some((secret_type, value)) if valid JWT found
-pub fn detect_jwt_token(secret: &str) -> Option<(String, String)> {
-    if let Some(token_match) = JWT_PATTERN.find(secret) {
-        let token = token_match.as_str();
-        if is_valid_jwt(token) {
-            return Some((
-                "JWT Token".to_string(),
-                token.to_string(),
-            ));
-        }
-    }
-    None
-}
-
 /// Detects all JWT tokens in a string
 ///
 /// # Arguments
@@ -119,10 +96,7 @@ pub fn detect_jwt_tokens(secret: &str) -> Vec<(String, String)> {
     for token_match in JWT_PATTERN.find_iter(secret) {
         let token = token_match.as_str();
         if is_valid_jwt(token) {
-            tokens.push((
-                "JWT Token".to_string(),
-                token.to_string(),
-            ));
+            tokens.push(("JWT Token".to_string(), token.to_string()));
         }
     }
 
@@ -140,9 +114,9 @@ mod tests {
         // Payload: {"sub":"1234567890","name":"John Doe","iat":1516239022}
         let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
 
-        let result = detect_jwt_token(jwt);
-        assert!(result.is_some());
-        let (secret_type, value) = result.unwrap();
+        let result = detect_jwt_tokens(jwt);
+        assert!(!result.is_empty());
+        let (secret_type, value) = result.first().unwrap();
         assert_eq!(secret_type, "JWT Token");
         assert_eq!(value, jwt);
     }
@@ -154,9 +128,9 @@ mod tests {
         // Payload: {"sub":"user123","name":"Alice","admin":true}
         let jwt = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwibmFtZSI6IkFsaWNlIiwiYWRtaW4iOnRydWV9.dGVzdC1zaWduYXR1cmUtZm9yLXJzMjU2LWFsZ29yaXRobS10aGlzLWlzLWEtbG9uZy1zaWduYXR1cmU";
 
-        let result = detect_jwt_token(jwt);
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().0, "JWT Token");
+        let result = detect_jwt_tokens(jwt);
+        assert!(!result.is_empty());
+        assert_eq!(result.first().unwrap().0, "JWT Token");
     }
 
     #[test]
@@ -164,9 +138,9 @@ mod tests {
         // JWT embedded in code
         let code = r#"const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";"#;
 
-        let result = detect_jwt_token(code);
-        assert!(result.is_some());
-        let (_, value) = result.unwrap();
+        let result = detect_jwt_tokens(code);
+        assert!(!result.is_empty());
+        let (_, value) = result.first().unwrap();
         assert!(value.starts_with("eyJ"));
         assert_eq!(value.split('.').count(), 3);
     }
@@ -176,8 +150,8 @@ mod tests {
         // JWT in HTTP Authorization header
         let header = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
 
-        let result = detect_jwt_token(header);
-        assert!(result.is_some());
+        let result = detect_jwt_tokens(header);
+        assert!(!result.is_empty());
     }
 
     #[test]
@@ -195,18 +169,18 @@ mod tests {
     fn test_invalid_jwt_not_three_parts() {
         // Only two parts
         let invalid = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
 
         // Four parts
         let invalid = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.signature.extra";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
     fn test_invalid_jwt_bad_base64() {
         // Invalid base64 in header
         let invalid = "not-base64!@#.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
@@ -214,7 +188,7 @@ mod tests {
         // Valid base64 but not JSON in header
         // "notjson" in base64url
         let invalid = "bm90anNvbg.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
@@ -222,7 +196,7 @@ mod tests {
         // Valid JSON but missing "alg" field in header
         // Header: {"typ":"JWT"} (missing "alg")
         let invalid = "eyJ0eXAiOiJKV1QifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
@@ -230,21 +204,21 @@ mod tests {
         // Header is JSON array instead of object
         // Header: ["alg","HS256"]
         let invalid = "WyJhbGciLCJIUzI1NiJd.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
     fn test_invalid_jwt_too_short() {
         // Parts are too short (less than 20 chars each)
         let invalid = "abc.def.ghi";
-        assert!(detect_jwt_token(invalid).is_none());
+        assert!(detect_jwt_tokens(invalid).is_empty());
     }
 
     #[test]
     fn test_not_a_token() {
-        assert!(detect_jwt_token("not_a_token").is_none());
-        assert!(detect_jwt_token("").is_none());
-        assert!(detect_jwt_token("just.two.dots.no.jwt").is_none());
+        assert!(detect_jwt_tokens("not_a_token").is_empty());
+        assert!(detect_jwt_tokens("").is_empty());
+        assert!(detect_jwt_tokens("just.two.dots.no.jwt").is_empty());
     }
 
     #[test]
