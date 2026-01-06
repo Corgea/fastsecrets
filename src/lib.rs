@@ -44,9 +44,121 @@ fn should_run_detector(detector_type: &str, secret_types: &Option<Vec<String>>) 
     }
 }
 
+/// Internal function that runs all detectors on a single chunk of text
+fn detect_chunk(secret_owned: String, secret_types: &Option<Vec<String>>) -> Vec<(String, String)> {
+    // Get the number of available CPUs to limit concurrent threads
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4); // Default to 4 if we can't determine CPU count
+
+    // Collect all detector tasks as closures
+    let mut detector_tasks: Vec<Box<dyn FnOnce() -> Vec<(String, String)> + Send>> = vec![];
+
+    // AWS Access Key ID detector
+    if should_run_detector("aws", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || {
+                let mut results = Vec::new();
+                if let Some((secret_type, value)) = secrets::aws::detect_aws_access_key(&s) {
+                    results.push((secret_type, value));
+                }
+                results
+            }
+        }));
+
+        // AWS Secret Access Key detector
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::aws::detect_aws_secret_keys(&s)
+        }));
+    }
+
+    // OpenAI token detector
+    if should_run_detector("openai", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::openai::detect_openai_tokens(&s)
+        }));
+    }
+
+    // Anthropic API key detector
+    if should_run_detector("anthropic", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::anthropic::detect_anthropic_tokens(&s)
+        }));
+    }
+
+    // JWT token detector
+    if should_run_detector("jwt", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::jwt::detect_jwt_tokens(&s)
+        }));
+    }
+
+    // Private key detector
+    if should_run_detector("private_key", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::private_key::detect_private_keys(&s)
+        }));
+    }
+
+    // Basic Auth credentials detector
+    if should_run_detector("basic_auth", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::basic_auth::detect_basic_auth_credentials(&s)
+        }));
+    }
+
+    // NPM token detector
+    if should_run_detector("npm", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::npm::detect_npm_tokens(&s)
+        }));
+    }
+
+    // Process detector tasks in batches based on CPU count
+    let mut all_secrets = Vec::new();
+    let mut task_iter = detector_tasks.into_iter();
+
+    loop {
+        // Take up to max_threads tasks
+        let batch: Vec<_> = task_iter.by_ref().take(max_threads).collect();
+        if batch.is_empty() {
+            break;
+        }
+
+        // Spawn threads for this batch
+        let handles: Vec<_> = batch
+            .into_iter()
+            .map(|task| std::thread::spawn(task))
+            .collect();
+
+        // Wait for this batch to complete and collect results
+        for handle in handles {
+            match handle.join() {
+                Ok(secrets) => all_secrets.extend(secrets),
+                Err(_) => {
+                    // Thread panicked, skip its results
+                    // In production, you might want to log this
+                }
+            }
+        }
+    }
+
+    all_secrets
+}
+
 /// Detects all secret keys in a given string
 ///
 /// This function runs each detector in parallel using separate threads for optimal performance.
+/// If the input string contains newlines, it will be split and processed in chunks of 10,000 lines
+/// for better memory efficiency with large inputs.
 ///
 /// Supports detection of:
 /// - AWS Access Key IDs (AKIA, ASIA, ABIA, ACCA, A3T*) - filter: "aws"
@@ -85,125 +197,27 @@ fn detect(
     secret: &str,
     secret_types: Option<Vec<String>>,
 ) -> PyResult<Vec<Secret>> {
-    // Convert to owned String for thread safety
-    let secret_owned = secret.to_string();
-
-    // Release the GIL and run detectors in parallel
+    // Release the GIL and run detectors
     let all_results = py.detach(|| {
-        // Get the number of available CPUs to limit concurrent threads
-        let max_threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4); // Default to 4 if we can't determine CPU count
+        // Check if the input contains newlines
+        if secret.contains('\n') {
+            // Split by newlines and process in chunks of 10,000 lines
+            const CHUNK_SIZE: usize = 1_000;
+            let lines: Vec<&str> = secret.lines().collect();
+            let mut all_secrets = Vec::new();
 
-        // Collect all detector tasks as closures
-        let mut detector_tasks: Vec<Box<dyn FnOnce() -> Vec<(String, String)> + Send>> = vec![];
-
-        // AWS Access Key ID detector
-        if should_run_detector("aws", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || {
-                    let mut results = Vec::new();
-                    if let Some((secret_type, value)) = secrets::aws::detect_aws_access_key(&s) {
-                        results.push((secret_type, value));
-                    }
-                    results
-                }
-            }));
-
-            // AWS Secret Access Key detector
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::aws::detect_aws_secret_keys(&s)
-            }));
-        }
-
-        // OpenAI token detector
-        if should_run_detector("openai", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::openai::detect_openai_tokens(&s)
-            }));
-        }
-
-        // Anthropic API key detector
-        if should_run_detector("anthropic", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::anthropic::detect_anthropic_tokens(&s)
-            }));
-        }
-
-        // JWT token detector
-        if should_run_detector("jwt", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::jwt::detect_jwt_tokens(&s)
-            }));
-        }
-
-        // Private key detector
-        if should_run_detector("private_key", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::private_key::detect_private_keys(&s)
-            }));
-        }
-
-        // Basic Auth credentials detector
-        if should_run_detector("basic_auth", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::basic_auth::detect_basic_auth_credentials(&s)
-            }));
-        }
-
-        // NPM token detector
-        if should_run_detector("npm", &secret_types) {
-            detector_tasks.push(Box::new({
-                let s = secret_owned.clone();
-                move || secrets::npm::detect_npm_tokens(&s)
-            }));
-        }
-
-        // Future detectors can be added here
-        // if should_run_detector("stripe", &secret_types) {
-        //     detector_tasks.push(Box::new({
-        //         let s = secret_owned.clone();
-        //         move || secrets::stripe::detect_stripe_keys(&s)
-        //     }));
-        // }
-
-        // Process detector tasks in batches based on CPU count
-        let mut all_secrets = Vec::new();
-        let mut task_iter = detector_tasks.into_iter();
-
-        loop {
-            // Take up to max_threads tasks
-            let batch: Vec<_> = task_iter.by_ref().take(max_threads).collect();
-            if batch.is_empty() {
-                break;
+            for chunk in lines.chunks(CHUNK_SIZE) {
+                // Join the chunk back into a single string with newlines
+                let chunk_str = chunk.join("\n");
+                let chunk_results = detect_chunk(chunk_str, &secret_types);
+                all_secrets.extend(chunk_results);
             }
 
-            // Spawn threads for this batch
-            let handles: Vec<_> = batch
-                .into_iter()
-                .map(|task| std::thread::spawn(task))
-                .collect();
-
-            // Wait for this batch to complete and collect results
-            for handle in handles {
-                match handle.join() {
-                    Ok(secrets) => all_secrets.extend(secrets),
-                    Err(_) => {
-                        // Thread panicked, skip its results
-                        // In production, you might want to log this
-                    }
-                }
-            }
+            all_secrets
+        } else {
+            // No newlines, process the entire string as a single chunk
+            detect_chunk(secret.to_string(), &secret_types)
         }
-
-        all_secrets
     });
 
     // Convert (String, String) tuples to Secret objects
@@ -428,6 +442,80 @@ mod tests {
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].secret_type, "Basic Auth Credentials");
             assert_eq!(result[0].value, "secretpass");
+        });
+    }
+
+    #[test]
+    fn test_detect_multiline_string() {
+        // Test that a multiline string is properly processed
+        let multiline = "# Configuration\n\
+                         AKIAIOSFODNN7EXAMPLE\n\
+                         some_var = \"value\"\n\
+                         OPENAI_KEY = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN";
+
+        Python::initialize();
+        Python::attach(|py| {
+            let result = detect(py, multiline, None).unwrap();
+
+            // Should detect both secrets even though they're on different lines
+            assert_eq!(result.len(), 2);
+            let types: Vec<&str> = result.iter().map(|s| s.secret_type.as_str()).collect();
+            assert!(types.contains(&"AWS Access Key ID"));
+            assert!(types.contains(&"OpenAI Token"));
+        });
+    }
+
+    #[test]
+    fn test_detect_multiline_secrets_across_chunks() {
+        // Test that secrets are detected across chunk boundaries
+        // This simulates a scenario where secrets could be in different 10k line chunks
+        let mut lines = Vec::new();
+
+        // Add some filler lines
+        for i in 0..100 {
+            lines.push(format!("line {} = some_value", i));
+        }
+
+        // Add a secret
+        lines.push("AKIAIOSFODNN7EXAMPLE".to_string());
+
+        // Add more filler
+        for i in 100..200 {
+            lines.push(format!("line {} = another_value", i));
+        }
+
+        // Add another secret
+        lines.push("OPENAI_KEY = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN".to_string());
+
+        let content = lines.join("\n");
+
+        Python::initialize();
+        Python::attach(|py| {
+            let result = detect(py, &content, None).unwrap();
+
+            // Should detect both secrets from the multiline content
+            assert_eq!(result.len(), 2);
+            let types: Vec<&str> = result.iter().map(|s| s.secret_type.as_str()).collect();
+            assert!(types.contains(&"AWS Access Key ID"));
+            assert!(types.contains(&"OpenAI Token"));
+        });
+    }
+
+    #[test]
+    fn test_detect_no_newlines_single_chunk() {
+        // Test that a string without newlines is processed as a single chunk
+        let single_line =
+            "AKIAIOSFODNN7EXAMPLE sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN";
+
+        Python::initialize();
+        Python::attach(|py| {
+            let result = detect(py, single_line, None).unwrap();
+
+            // Should detect both secrets on the same line
+            assert_eq!(result.len(), 2);
+            let types: Vec<&str> = result.iter().map(|s| s.secret_type.as_str()).collect();
+            assert!(types.contains(&"AWS Access Key ID"));
+            assert!(types.contains(&"OpenAI Token"));
         });
     }
 }
