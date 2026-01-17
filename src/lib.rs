@@ -4,10 +4,17 @@ mod secrets {
     pub mod anthropic;
     pub mod aws;
     pub mod basic_auth;
+    pub mod digitalocean;
+    pub mod discord;
+    pub mod gitlab;
     pub mod jwt;
     pub mod npm;
     pub mod openai;
     pub mod private_key;
+    pub mod pypi;
+    pub mod slack;
+    pub mod stripe;
+    pub mod twilio;
 }
 
 /// Secret class representing a detected secret
@@ -122,6 +129,62 @@ fn detect_chunk(secret_owned: String, secret_types: &Option<Vec<String>>) -> Vec
         }));
     }
 
+    // Discord token detector
+    if should_run_detector("discord", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::discord::detect_discord_tokens(&s)
+        }));
+    }
+
+    // PyPI token detector
+    if should_run_detector("pypi", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::pypi::detect_pypi_tokens(&s)
+        }));
+    }
+
+    // Slack token detector
+    if should_run_detector("slack", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::slack::detect_slack_tokens(&s)
+        }));
+    }
+
+    // Stripe access key detector
+    if should_run_detector("stripe", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::stripe::detect_stripe_keys(&s)
+        }));
+    }
+
+    // Twilio API key detector
+    if should_run_detector("twilio", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::twilio::detect_twilio_keys(&s)
+        }));
+    }
+
+    // GitLab token detector
+    if should_run_detector("gitlab", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::gitlab::detect_gitlab_tokens(&s)
+        }));
+    }
+
+    // DigitalOcean API key detector
+    if should_run_detector("digitalocean", secret_types) {
+        detector_tasks.push(Box::new({
+            let s = secret_owned.clone();
+            move || secrets::digitalocean::detect_digitalocean_keys(&s)
+        }));
+    }
+
     // Process detector tasks in batches based on CPU count
     let mut all_secrets = Vec::new();
     let mut task_iter = detector_tasks.into_iter();
@@ -169,13 +232,20 @@ fn detect_chunk(secret_owned: String, secret_types: &Option<Vec<String>>) -> Vec
 /// - Private Keys (RSA, EC, DSA, OpenSSH, PGP, SSH2, PuTTY) - filter: "private_key"
 /// - Basic Auth Credentials (passwords in URIs like user:pass@host) - filter: "basic_auth"
 /// - NPM Tokens (npmrc authToken) - filter: "npm"
+/// - Discord Bot Tokens ([M|N|O]...) - filter: "discord"
+/// - PyPI Tokens (pypi-AgE...) - filter: "pypi"
+/// - Slack Tokens and Webhooks (xox* or hooks.slack.com) - filter: "slack"
+/// - Stripe Access Keys (sk_live/rk_live) - filter: "stripe"
+/// - Twilio API Keys (AC..., SK...) - filter: "twilio"
+/// - GitLab Tokens (glpat, glrt, etc.) - filter: "gitlab"
+/// - DigitalOcean API Keys (dop_v1, doo_v1, dor_v1) - filter: "digitalocean"
 /// - More detectors can be added here in the future
 ///
 /// # Arguments
 /// * `py` - Python context (used to release GIL during computation)
 /// * `secret` - The string to check for secret patterns
 /// * `secret_types` - Optional list of secret types to detect. If None, all types are detected.
-///                    Valid values: "aws", "openai", "anthropic", "jwt", "private_key", "basic_auth", "npm"
+///                    Valid values: "aws", "openai", "anthropic", "jwt", "private_key", "basic_auth", "npm", "discord", "pypi", "slack", "stripe", "twilio", "gitlab", "digitalocean"
 ///
 /// # Returns
 /// * `Vec<Secret>` - List of all secrets found (empty list if none detected)
@@ -248,6 +318,13 @@ mod tests {
         let aws_secret = r#"secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY""#;
         let openai = "sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN";
         let anthropic = "sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY";
+        let discord = format!("M{}.{}.{}", "a".repeat(23), "b".repeat(6), "c".repeat(27));
+        let pypi = format!("pypi-AgEIcHlwaS5vcmc{}", "a".repeat(70));
+        let slack = "xoxb-1234567890-123456789012-abcdef123456";
+        let stripe = "sk_live_1234567890abcdefghijklmn";
+        let twilio = format!("AC{}", "a".repeat(32));
+        let gitlab = format!("glpat-{}", "a".repeat(20));
+        let digitalocean = format!("dop_v1_{}", "a".repeat(64));
 
         Python::initialize();
         Python::attach(|py| {
@@ -266,6 +343,34 @@ mod tests {
             let result4 = detect(py, anthropic, None).unwrap();
             assert_eq!(result4.len(), 1);
             assert_eq!(result4[0].secret_type, "Anthropic API Key");
+
+            let result5 = detect(py, &discord, None).unwrap();
+            assert_eq!(result5.len(), 1);
+            assert_eq!(result5[0].secret_type, "Discord Bot Token");
+
+            let result6 = detect(py, &pypi, None).unwrap();
+            assert_eq!(result6.len(), 1);
+            assert_eq!(result6[0].secret_type, "PyPI Token");
+
+            let result7 = detect(py, slack, None).unwrap();
+            assert_eq!(result7.len(), 1);
+            assert_eq!(result7[0].secret_type, "Slack Token");
+
+            let result8 = detect(py, stripe, None).unwrap();
+            assert_eq!(result8.len(), 1);
+            assert_eq!(result8[0].secret_type, "Stripe Access Key");
+
+            let result9 = detect(py, &twilio, None).unwrap();
+            assert_eq!(result9.len(), 1);
+            assert_eq!(result9[0].secret_type, "Twilio API Key");
+
+            let result10 = detect(py, &gitlab, None).unwrap();
+            assert_eq!(result10.len(), 1);
+            assert_eq!(result10[0].secret_type, "GitLab Token");
+
+            let result11 = detect(py, &digitalocean, None).unwrap();
+            assert_eq!(result11.len(), 1);
+            assert_eq!(result11[0].secret_type, "DigitalOcean API Key");
         });
     }
 
@@ -289,12 +394,21 @@ mod tests {
     #[test]
     fn test_detect_line_by_line_scanning() {
         // Simulates scanning a file line by line
+        let discord = format!("M{}.{}.{}", "a".repeat(23), "b".repeat(6), "c".repeat(27));
+        let pypi = format!("pypi-AgEIcHlwaS5vcmc{}", "a".repeat(70));
         let lines = vec![
             "# Configuration file",
             "AKIAIOSFODNN7EXAMPLE",  // AWS key on its own line
             r#"AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY""#,
             "OPENAI_KEY = sk-aBcDeFgHiJkLmNoPqRsTT3BlbkFJuVwXyZaBcDeFgHiJkLmN",
             "ANTHROPIC_KEY = sk-ant-api03-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-api03-ABCDEFGHIJKLMNOPQRSTUVWXY",
+            &discord,
+            &pypi,
+            "SLACK_TOKEN = xoxb-1234567890-123456789012-abcdef123456",
+            "STRIPE_KEY = sk_live_1234567890abcdefghijklmn",
+            "TWILIO_KEY = ACaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "GITLAB_TOKEN = glpat-aaaaaaaaaaaaaaaaaaaa",
+            "DIGITALOCEAN_KEY = dop_v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "NOT_A_SECRET = hello_world",
         ];
 
@@ -308,12 +422,19 @@ mod tests {
                 }
             }
 
-            // Should find all four types
-            assert_eq!(found_secrets.len(), 4);
+            // Should find all supported types
+            assert_eq!(found_secrets.len(), 11);
             assert!(found_secrets.contains(&"AWS Access Key ID".to_string()));
             assert!(found_secrets.contains(&"AWS Secret Access Key".to_string()));
             assert!(found_secrets.contains(&"OpenAI Token".to_string()));
             assert!(found_secrets.contains(&"Anthropic API Key".to_string()));
+            assert!(found_secrets.contains(&"Discord Bot Token".to_string()));
+            assert!(found_secrets.contains(&"PyPI Token".to_string()));
+            assert!(found_secrets.contains(&"Slack Token".to_string()));
+            assert!(found_secrets.contains(&"Stripe Access Key".to_string()));
+            assert!(found_secrets.contains(&"Twilio API Key".to_string()));
+            assert!(found_secrets.contains(&"GitLab Token".to_string()));
+            assert!(found_secrets.contains(&"DigitalOcean API Key".to_string()));
         });
     }
 
@@ -335,9 +456,14 @@ mod tests {
     fn test_no_false_positives_with_similar_patterns() {
         // Ensure similar-looking strings don't trigger false positives
         let non_secrets = vec![
-            "AKIA123456789",            // Too short for AWS key
-            "sk-project-name-only",     // Missing T3BlbkFJ
-            "secret = \"short_value\"", // Too short for AWS secret
+            "AKIA123456789",                             // Too short for AWS key
+            "sk-project-name-only",                      // Missing T3BlbkFJ
+            "secret = \"short_value\"",                  // Too short for AWS secret
+            "xoxc-1234567890-123456789012-abcdef123456", // Invalid Slack prefix
+            "sk_live_1234567890abcdefghijk",             // Stripe too short
+            "ACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",        // Twilio uppercase
+            "glpat-aaaaaaaaaaaaaaaaaaa",                 // GitLab too short
+            "dop_v1_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // DigitalOcean too short
             "",
             "completely_normal_text",
         ];
