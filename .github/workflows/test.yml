@@ -34,7 +34,9 @@ jobs:
         uses: astral-sh/setup-uv@v5
       - name: Install dependencies
         run: uv sync --extra tests
+      - name: Install maturin
+        run: uv tool install maturin
       - name: Build with maturin
-        run: uv run maturin develop
+        run: maturin develop --uv
       - name: Run pytest
         run: uv run pytest
